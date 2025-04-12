@@ -8,9 +8,10 @@ const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.GuildMembers, GatewayIntentBits.MessageContent]
 });
 
-const enviados = new Set();
 const LOG_FILE = 'log_mensagens.txt';
-const ENVIADOS_FILE = 'usuarios_enviados.txt';
+const ENVIADOS_FILE = 'usuarios_enviados.json';
+
+let enviados = [];
 
 function wait(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -21,17 +22,29 @@ function registrarLog(status, member, tipo, erro = '') {
   fs.appendFileSync(LOG_FILE, log);
 }
 
+// Função para carregar os IDs dos usuários que já receberam a mensagem
 function carregarEnviados() {
   if (fs.existsSync(ENVIADOS_FILE)) {
     const data = fs.readFileSync(ENVIADOS_FILE, 'utf8');
-    data.split('\n').filter(Boolean).forEach(id => enviados.add(id));
+    try {
+      enviados = JSON.parse(data);
+    } catch (error) {
+      console.error('Erro ao ler o arquivo de enviados:', error);
+      enviados = [];
+    }
   }
 }
 
+// Função para salvar os IDs dos usuários no formato JSON
 function salvarEnviados() {
-  fs.writeFileSync(ENVIADOS_FILE, Array.from(enviados).join('\n'));
+  try {
+    fs.writeFileSync(ENVIADOS_FILE, JSON.stringify(enviados, null, 2));
+  } catch (error) {
+    console.error('Erro ao salvar o arquivo de enviados:', error);
+  }
 }
 
+// Função 1: Verificação de erros e envio de mensagens embed
 async function enviarMensagemEmbed(member, embed, imageLink, tentativa = 1) {
   try {
     embed.setImage(imageLink);
@@ -41,7 +54,7 @@ async function enviarMensagemEmbed(member, embed, imageLink, tentativa = 1) {
     });
     console.log(`✅ Mensagem enviada para ${member.user.tag}`);
     registrarLog('Sucesso', member, 'Embed');
-    enviados.add(member.user.id);
+    enviados.push(member.user.id);
     return 'sucesso';
   } catch (err) {
     if (err.code === 50007) {
@@ -62,6 +75,19 @@ async function enviarMensagemEmbed(member, embed, imageLink, tentativa = 1) {
   }
 }
 
+// Função 2: Resetar lista de enviados
+async function resetarEnviados(message) {
+  if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+    return message.reply('❌ Apenas administradores podem usar este comando.');
+  }
+
+  enviados = [];
+  salvarEnviados();
+  console.log('✅ Lista de enviados resetada!');
+  return message.reply('✅ A lista de enviados foi resetada com sucesso!');
+}
+
+// Função 3: Envio de mensagens simples
 async function enviarMensagemSimples(member, messageContent, imageLinks, tentativa = 1) {
   try {
     await member.send({
@@ -70,7 +96,7 @@ async function enviarMensagemSimples(member, messageContent, imageLinks, tentati
     });
     console.log(`✅ Mensagem simples enviada para ${member.user.tag}`);
     registrarLog('Sucesso', member, 'Mensagem Simples');
-    enviados.add(member.user.id);
+    enviados.push(member.user.id);
     return 'sucesso';
   } catch (err) {
     if (err.code === 50007) {
@@ -91,6 +117,13 @@ async function enviarMensagemSimples(member, messageContent, imageLinks, tentati
   }
 }
 
+// Função 4: Status de envio (resumo)
+async function enviarResumoStatus(message, successCount, errorCount, blockedCount) {
+  const resumo = `📨 **Resumo do envio**:\n\n✅ ${successCount} enviados com sucesso\n🚫 ${blockedCount} bloqueados\n❌ ${errorCount} com erro`;
+  console.log(resumo);
+  message.reply(resumo);
+}
+
 async function enviarMensagens(guild, embedOrMessage, imageLinkOrLinks, isEmbed, message) {
   const members = await guild.members.fetch();
 
@@ -99,7 +132,7 @@ async function enviarMensagens(guild, embedOrMessage, imageLinkOrLinks, isEmbed,
   let blockedCount = 0;
 
   for (const member of members.values()) {
-    if (!member.user.bot && !enviados.has(member.user.id)) {
+    if (!member.user.bot && !enviados.includes(member.user.id)) {
       let resultado;
       if (isEmbed) {
         resultado = await enviarMensagemEmbed(member, embedOrMessage, imageLinkOrLinks);
@@ -111,15 +144,13 @@ async function enviarMensagens(guild, embedOrMessage, imageLinkOrLinks, isEmbed,
       else if (resultado === 'bloqueado') blockedCount++;
       else if (resultado === 'erro') errorCount++;
 
-      await wait(3000); // Espera 3 segundos entre envios
+      await wait(3000);
     }
   }
 
   salvarEnviados();
 
-  const resumo = `📨 **Resumo do envio**:\n✅ ${successCount} enviados com sucesso\n🚫 ${blockedCount} bloqueados\n❌ ${errorCount} com erro`;
-  console.log(resumo);
-  message.reply(resumo);
+  await enviarResumoStatus(message, successCount, errorCount, blockedCount);
 }
 
 client.on('messageCreate', async message => {
@@ -153,6 +184,11 @@ client.on('messageCreate', async message => {
     ];
 
     await enviarMensagens(message.guild, messageContent, imageLinks, false, message);
+  }
+
+  // Comando para resetar a lista de enviados
+  if (message.content.startsWith('!resetarenviados')) {
+    await resetarEnviados(message);
   }
 });
 
