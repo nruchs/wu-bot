@@ -95,4 +95,4 @@ O comando `!resetarenviados` permite que um administrador do servidor reinicie a
 - **Imagens e Conteúdo:** Você pode adicionar links de imagens e personalizar o conteúdo das mensagens e embeds conforme necessário.
 
 ## Feito com 💖 por uma mente inquieta
-Este bot nasceu na madrugada de uma mulher que, após horas tentando fazer as coisas funcionarem, mostrou que, quando se quer fazer algo, a única coisa que é preciso é querer.
+Não basta querer, tem que fazer. Sonhos são grátis, mas a execução do código custa — e eu paguei o preço deixando o sono de lado. Esse bot não se fez sozinho, não.
