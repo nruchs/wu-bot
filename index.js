@@ -1,6 +1,7 @@
-// index.js
 const { Client, GatewayIntentBits, EmbedBuilder, PermissionsBitField } = require('discord.js');
 const fs = require('fs');
+const path = require('path');
+
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -9,67 +10,104 @@ const client = new Client({
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.DirectMessages
   ],
-  partials: ['CHANNEL'] // necessário para enviar DMs
+  partials: ['CHANNEL']
 });
 
-const TOKEN = 'MTE5NjQ5NTA4NjY5NjAyNjEyMg.GujyBV.p5CciBWqGXano-qZXkyFXEFbFBMtwRcXKetVHQ'; // Troque pelo seu token
+const TOKEN = 'MTE5NjQ5NTA4NjY5NjAyNjEyMg.GujyBV.p5CciBWqGXano-qZXkyFXEFbFBMtwRcXKetVHQ'; // Troque pelo seu token real, com segurança
 
-// Função para aguardar um tempo antes de continuar
-function wait(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-// Carrega o arquivo de IDs de usuários já notificados
 const arquivoEnviados = './jaEnviados.json';
 let enviados = new Set();
 
-// Verifica se o arquivo existe e carrega os dados
 if (fs.existsSync(arquivoEnviados)) {
   const dados = fs.readFileSync(arquivoEnviados, 'utf-8');
   enviados = new Set(JSON.parse(dados));
 }
 
-// Função para salvar os IDs de usuários que já receberam a mensagem
 function salvarEnviados() {
   fs.writeFileSync(arquivoEnviados, JSON.stringify([...enviados], null, 2));
 }
 
-// Função para enviar mensagens com embed
-async function enviarMensagemEmbed(member, embed, imageLink) {
+function wait(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function registrarLog(status, member, messageType, additionalInfo = '') {
+  const logMessage = `${new Date().toISOString()} - [${status}] - Membro: ${member.user.tag} (ID: ${member.user.id}) - Tipo de mensagem: ${messageType} ${additionalInfo}\n`;
+  fs.appendFileSync(path.join(__dirname, 'logs.txt'), logMessage);
+}
+
+async function enviarMensagemEmbed(member, embed, imageLink, tentativa = 1) {
   try {
     await member.send({
       embeds: [embed],
       files: [imageLink]
     });
     console.log(`✅ Mensagem enviada para ${member.user.tag}`);
-    enviados.add(member.user.id); // Adiciona o ID ao Set
-    await wait(1500); // Pausa de 1.5s entre as mensagens para evitar rate limit
+    registrarLog('Sucesso', member, 'Embed');
+    enviados.add(member.user.id);
   } catch (err) {
-    if (err.code === 50007) { // Código de erro para bloqueio de DM
-      console.log(`⚠️ Não foi possível enviar para ${member.user.tag}, DM bloqueada.`);
+    if (err.code === 50007) {
+      console.log(`⚠️ DM bloqueada para ${member.user.tag}.`);
+      registrarLog('Falha', member, 'Embed', 'DM bloqueada');
     } else {
-      console.log(`❌ Erro ao enviar para ${member.user.tag}: ${err.message}`);
+      console.log(`⚠️ Erro ao enviar para ${member.user.tag}: ${err.message}`);
+      if (tentativa < 3) {
+        await wait(5000);
+        await enviarMensagemEmbed(member, embed, imageLink, tentativa + 1);
+      } else {
+        console.log(`❌ Não foi possível enviar para ${member.user.tag}`);
+        registrarLog('Falha', member, 'Embed', `Erro: ${err.message}`);
+      }
     }
   }
 }
 
-// Função para enviar mensagens simples com várias imagens
-async function enviarMensagemSimples(member, messageContent, imageLinks) {
+async function enviarMensagemSimples(member, messageContent, imageLinks, tentativa = 1) {
   try {
     await member.send({
       content: messageContent,
       files: imageLinks
     });
     console.log(`✅ Mensagem simples enviada para ${member.user.tag}`);
-    enviados.add(member.user.id); // Adiciona o ID ao Set
-    await wait(1500); // Pausa de 1.5s entre as mensagens para evitar rate limit
+    registrarLog('Sucesso', member, 'Mensagem Simples');
+    enviados.add(member.user.id);
   } catch (err) {
-    if (err.code === 50007) { // Código de erro para bloqueio de DM
-      console.log(`⚠️ Não foi possível enviar para ${member.user.tag}, DM bloqueada.`);
+    if (err.code === 50007) {
+      console.log(`⚠️ DM bloqueada para ${member.user.tag}.`);
+      registrarLog('Falha', member, 'Mensagem Simples', 'DM bloqueada');
     } else {
-      console.log(`❌ Erro ao enviar para ${member.user.tag}: ${err.message}`);
+      console.log(`⚠️ Erro ao enviar para ${member.user.tag}: ${err.message}`);
+      if (tentativa < 3) {
+        await wait(5000);
+        await enviarMensagemSimples(member, messageContent, imageLinks, tentativa + 1);
+      } else {
+        console.log(`❌ Não foi possível enviar para ${member.user.tag}`);
+        registrarLog('Falha', member, 'Mensagem Simples', `Erro: ${err.message}`);
+      }
     }
   }
+}
+
+async function enviarMensagensComEmbed(guild, embed, imageLink) {
+  const members = await guild.members.fetch();
+  for (const member of members.values()) {
+    if (!member.user.bot && !enviados.has(member.user.id)) {
+      await enviarMensagemEmbed(member, embed, imageLink);
+      await wait(3000);
+    }
+  }
+  salvarEnviados();
+}
+
+async function enviarMensagensSimples(guild, messageContent, imageLinks) {
+  const members = await guild.members.fetch();
+  for (const member of members.values()) {
+    if (!member.user.bot && !enviados.has(member.user.id)) {
+      await enviarMensagemSimples(member, messageContent, imageLinks);
+      await wait(3000);
+    }
+  }
+  salvarEnviados();
 }
 
 client.once('ready', () => {
@@ -82,29 +120,15 @@ client.on('messageCreate', async (message) => {
       return message.reply('❌ Apenas administradores podem usar este comando.');
     }
 
-    const members = await message.guild.members.fetch();
     const embed = new EmbedBuilder()
       .setTitle('📢 Aviso importante!')
-      .setDescription(`Olá, ${message.author.username}! Temos novidades incríveis no servidor! 🎉`)
+      .setDescription('Mensagem de evento mensal do servidor!')
       .setColor('#0099ff')
       .setFooter({ text: 'Equipe Warlords' });
 
     const imageLink = 'https://runescape.wiki/images/Pharaoh%27s_Folly_head_banner.jpg?c4cf1';
 
-    let successCount = 0;
-    let errorCount = 0;
-    let blockedCount = 0;
-
-    for (const member of members.values()) {
-      if (!member.user.bot && !enviados.has(member.user.id)) {
-        await enviarMensagemEmbed(member, embed, imageLink);
-        successCount++;
-      }
-    }
-
-    salvarEnviados(); // Salva os IDs dos membros para evitar duplicação
-
-    message.reply(`📨 Mensagens enviadas: ${successCount} com sucesso, ${blockedCount} bloqueadas, ${errorCount} com erro.`);
+    await enviarMensagensComEmbed(message.guild, embed, imageLink);
   }
 
   if (message.content.startsWith('!enviardmsimples')) {
@@ -112,27 +136,13 @@ client.on('messageCreate', async (message) => {
       return message.reply('❌ Apenas administradores podem usar este comando.');
     }
 
-    const members = await message.guild.members.fetch();
-    const messageContent = '🔔 Aviso importante: Não perca as atualizações do servidor! 🎉';
+    const messageContent = '🔔 Aviso importante: Não perca as atualizações do servidor!';
     const imageLinks = [
       'https://runescape.wiki/images/Pharaoh%27s_Folly_head_banner.jpg?c4cf1',
       'https://runescape.wiki/images/RS_Ahead_at_RuneFest_-_Havenhythe%2C_Leagues_and_More_Revealed%21_%2821%29_update_image.jpg?be215'
     ];
 
-    let successCount = 0;
-    let errorCount = 0;
-    let blockedCount = 0;
-
-    for (const member of members.values()) {
-      if (!member.user.bot && !enviados.has(member.user.id)) {
-        await enviarMensagemSimples(member, messageContent, imageLinks);
-        successCount++;
-      }
-    }
-
-    salvarEnviados(); // Salva os IDs dos membros para evitar duplicação
-
-    message.reply(`📨 Mensagens simples enviadas: ${successCount} com sucesso, ${blockedCount} bloqueadas, ${errorCount} com erro.`);
+    await enviarMensagensSimples(message.guild, messageContent, imageLinks);
   }
 });
 
