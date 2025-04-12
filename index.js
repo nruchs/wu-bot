@@ -127,15 +127,16 @@ async function enviarResumoStatus(message, successCount, errorCount, blockedCoun
   message.reply(resumo);
 }
 
-async function enviarMensagens(guild, embedOrMessage, imageLinkOrLinks, isEmbed, message) {
+async function enviarMensagens(guild, embedOrMessage, imageLinkOrLinks, isEmbed, message, cargosFiltro = []) {
   const members = await guild.members.fetch();
-
   let successCount = 0;
   let errorCount = 0;
   let blockedCount = 0;
 
   for (const member of members.values()) {
-    if (!member.user.bot && !enviados.includes(member.user.id)) {
+    const temCargoValido = cargosFiltro.length === 0 || member.roles.cache.some(role => cargosFiltro.includes(role.name.toLowerCase()));
+
+    if (!member.user.bot && !enviados.includes(member.user.id) && temCargoValido) {
       let resultado;
       if (isEmbed) {
         resultado = await enviarMensagemEmbed(member, embedOrMessage, imageLinkOrLinks);
@@ -160,7 +161,6 @@ async function enviarMensagens(guild, embedOrMessage, imageLinkOrLinks, isEmbed,
   }
 
   salvarEnviados();
-
   await enviarResumoStatus(message, successCount, errorCount, blockedCount);
 }
 
@@ -172,6 +172,13 @@ client.on('messageCreate', async message => {
       return message.reply('❌ Apenas administradores podem usar este comando.');
     }
 
+    const args = message.content.split(' ').slice(1);
+    if (args.length === 0) {
+      return message.reply('❌ Informe pelo menos um cargo. Exemplo: `!enviardmembed membro visitante`');
+    }
+  
+    const cargosFiltro = args.map(c => c.toLowerCase());
+
     const embed = new EmbedBuilder()
       .setTitle('📢 Aviso importante!')
       .setDescription('Mensagem de evento mensal do servidor!')
@@ -180,7 +187,7 @@ client.on('messageCreate', async message => {
 
     const imageLink = 'https://runescape.wiki/images/Pharaoh%27s_Folly_head_banner.jpg?c4cf1';
 
-    await enviarMensagens(message.guild, embed, imageLink, true, message);
+    await enviarMensagens(message.guild, embed, imageLink, true, message, cargosFiltro);
   }
 
   if (message.content.startsWith('!enviardmsimples')) {
@@ -188,13 +195,20 @@ client.on('messageCreate', async message => {
       return message.reply('❌ Apenas administradores podem usar este comando.');
     }
 
+    const args = message.content.split(' ').slice(1);
+    if (args.length === 0) {
+      return message.reply('❌ Informe pelo menos um cargo. Exemplo: `!enviardmsimples membro visitante`');
+    }
+  
+    const cargosFiltro = args.map(c => c.toLowerCase());
+
     const messageContent = '🔔 Aviso importante: Não perca as atualizações do servidor!';
     const imageLinks = [
       'https://runescape.wiki/images/Pharaoh%27s_Folly_head_banner.jpg?c4cf1',
       'https://runescape.wiki/images/RS_Ahead_at_RuneFest_-_Havenhythe%2C_Leagues_and_More_Revealed%21_%2821%29_update_image.jpg?be215'
     ];
 
-    await enviarMensagens(message.guild, messageContent, imageLinks, false, message);
+    await enviarMensagens(message.guild, messageContent, imageLinks, false, message, cargosFiltro);
   }
 
   // Comando para resetar a lista de enviados
