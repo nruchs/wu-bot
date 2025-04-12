@@ -182,10 +182,10 @@ client.on('messageCreate', async message => {
     const embed = new EmbedBuilder()
       .setTitle('📢 Aviso importante!')
       .setDescription('Mensagem de evento mensal do servidor!')
-      .setColor('#0099ff')
+      .setColor('#112072')
       .setFooter({ text: 'Equipe Warlords' });
 
-    const imageLink = 'https://runescape.wiki/images/Pharaoh%27s_Folly_head_banner.jpg?c4cf1';
+    const imageLink = ''; // URL da imagem
 
     await enviarMensagens(message.guild, embed, imageLink, true, message, cargosFiltro);
   }
@@ -204,8 +204,8 @@ client.on('messageCreate', async message => {
 
     const messageContent = '🔔 Aviso importante: Não perca as atualizações do servidor!';
     const imageLinks = [
-      'https://runescape.wiki/images/Pharaoh%27s_Folly_head_banner.jpg?c4cf1',
-      'https://runescape.wiki/images/RS_Ahead_at_RuneFest_-_Havenhythe%2C_Leagues_and_More_Revealed%21_%2821%29_update_image.jpg?be215'
+      '',
+      '' // URL das imagens
     ];
 
     await enviarMensagens(message.guild, messageContent, imageLinks, false, message, cargosFiltro);
