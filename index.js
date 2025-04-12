@@ -12,6 +12,9 @@ const LOG_FILE = 'log_mensagens.txt';
 const ENVIADOS_FILE = 'usuarios_enviados.json';
 
 let enviados = [];
+let mensagensEnviadasNoMinuto = 0;
+const LIMITE_MENSAGENS_POR_MINUTO = 50; // Limite de mensagens por minuto
+const TEMPO_REINICIO = 60000; // 60.000 milissegundos = 1 minuto
 
 function wait(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -144,7 +147,15 @@ async function enviarMensagens(guild, embedOrMessage, imageLinkOrLinks, isEmbed,
       else if (resultado === 'bloqueado') blockedCount++;
       else if (resultado === 'erro') errorCount++;
 
-      await wait(3000);
+      mensagensEnviadasNoMinuto++;
+
+      if (mensagensEnviadasNoMinuto >= LIMITE_MENSAGENS_POR_MINUTO) {
+        console.log("Limite de 50 mensagens por minuto atingido. Aguardando reinício...");
+        await wait(TEMPO_REINICIO);
+        mensagensEnviadasNoMinuto = 0;
+      }
+
+      await wait(1200); // Pausa de 1,2 segundos entre as mensagens
     }
   }
 
